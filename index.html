@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>AI 음식 부패 판별기</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest"></script>
+  <style>
+    body { font-family: 'Malgun Gothic', sans-serif; text-align: center; padding: 20px; }
+    video { width: 300px; height: auto; border: 1px solid #ccc; margin-top: 10px; }
+    .result { font-size: 20px; margin-top: 10px; }
+    input { padding: 5px; font-size: 16px; width: 100px; }
+  </style>
+</head>
+<body>
+  <h2>🍽️ AI 음식 부패 판별기</h2>
+  <button type="button" onclick="init()">▶ 카메라 실행</button><br>
+  <video id="webcam" autoplay playsinline></video>
+
+  <div class="result">
+    <p><strong>🧠 이미지 분석 결과:</strong> <span id="label"></span></p>
+    <label for="gas">👃 센서 수치 입력:</label>
+    <input type="number" id="gas" placeholder="예: 290" />
+    <button onclick="checkResult()">🍽️ 메시지 확인</button>
+    <p id="finalMessage" style="font-weight: bold; color: darkred;"></p>
+  </div>
+
+  <script type="text/javascript">
+    let model, webcam, labelContainer, maxPredictions;
+    let currentLabel = "";
+
+    const URL = "https://teachablemachine.withgoogle.com/models/DCFQawZzH/";
+
+    async function init() {
+      const modelURL = URL + "model.json";
+      const metadataURL = URL + "metadata.json";
+
+      model = await tmImage.load(modelURL, metadataURL);
+      maxPredictions = model.getTotalClasses();
+
+      const flip = true;
+      webcam = new tmImage.Webcam(300, 300, flip);
+      await webcam.setup();
+      await webcam.play();
+      window.requestAnimationFrame(loop);
+
+      document.getElementById("webcam").appendChild(webcam.canvas);
+    }
+
+    async function loop() {
+      webcam.update();
+      await predict();
+      window.requestAnimationFrame(loop);
+    }
+
+    async function predict() {
+      const prediction = await model.predict(webcam.canvas);
+      prediction.sort((a, b) => b.probability - a.probability);
+      currentLabel = prediction[0].className;
+      document.getElementById("label").innerText = currentLabel;
+    }
+
+    function checkResult() {
+      const gas = parseInt(document.getElementById("gas").value);
+      let message = "";
+
+      if (!gas && gas !== 0) {
+        // 센서 수치가 없을 경우, 이미지 분석 결과만 사용
+        if (currentLabel === "A") message = "맛있게 드세요.";
+        else if (currentLabel === "B") message = "괜찮아 보여도 먹지 마세요.";
+        else if (currentLabel === "C") message = "절대 먹지 마세요.";
+      } else {
+        if (currentLabel === "A" && gas < 280) message = "맛있게 드세요.";
+        else if (currentLabel === "B" && gas >= 280 && gas <= 300) message = "괜찮아 보여도 먹지 마세요.";
+        else if (currentLabel === "C" && gas > 300) message = "절대 먹지 마세요.";
+        else message = "⚠️ AI 분석 결과와 센서 수치가 일치하지 않습니다. 주의하세요.";
+      }
+
+      document.getElementById("finalMessage").innerText = message;
+    }
+  </script>
+</body>
+</html>
