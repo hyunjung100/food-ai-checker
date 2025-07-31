@@ -10,31 +10,37 @@
     video { width: 300px; height: auto; border: 1px solid #ccc; margin-top: 10px; }
     .result { font-size: 20px; margin-top: 10px; }
     input { padding: 5px; font-size: 16px; width: 100px; }
+    #finalMessage { font-weight: bold; margin-top: 15px; }
+    p.notice { font-size: 14px; color: gray; margin: 5px 0; }
   </style>
 </head>
 <body>
   <h2>🍽️ AI 음식 부패 판별기</h2>
-  <button type="button" onclick="init()">▶ 카메라 실행</button><br>
+  <p>▶ 카메라 실행을 눌러 음식을 인식하세요</p>
+  <button type="button" onclick="init()">▶ 카메라 실행</button>
+  <p class="notice">※ 카메라 실행 시, 브라우저에서 권한 허용을 요청할 수 있습니다.</p>
   <video id="webcam" autoplay playsinline></video>
 
   <div class="result">
-    <p><strong>🧠 이미지 분석 결과:</strong> <span id="label"></span></p>
-    <label for="gas">👃 센서 수치 입력:</label>
-    <input type="number" id="gas" placeholder="예: 290" />
+    <p>🧠 <strong>분석 결과:</strong> <span id="label"></span></p>
+    <p>👃 <label for="gas">센서 수치 입력:</label>
+       <input type="number" id="gas" placeholder="예: 290" /></p>
     <button onclick="checkResult()">🍽️ 메시지 확인</button>
-    <p id="finalMessage" style="font-weight: bold; color: darkred;"></p>
+    <div id="finalMessage"></div>
   </div>
 
   <script type="text/javascript">
-    let model, webcam, labelContainer, maxPredictions;
+    let model, webcam, maxPredictions;
     let currentLabel = "";
 
+    // Teachable Machine 모델 URL
     const URL = "https://teachablemachine.withgoogle.com/models/DCFQawZzH/";
 
+    // 초기화 및 모델 로딩
     async function init() {
       const modelURL = URL + "model.json";
       const metadataURL = URL + "metadata.json";
-
+      document.getElementById('finalMessage').innerText = '모델을 불러오는 중...';
       model = await tmImage.load(modelURL, metadataURL);
       maxPredictions = model.getTotalClasses();
 
@@ -43,39 +49,50 @@
       await webcam.setup();
       await webcam.play();
       window.requestAnimationFrame(loop);
+      document.getElementById('finalMessage').innerText = '';
 
       document.getElementById("webcam").appendChild(webcam.canvas);
     }
 
+    // 연속 예측 루프
     async function loop() {
       webcam.update();
       await predict();
       window.requestAnimationFrame(loop);
     }
 
+    // 예측 및 라벨 변환
     async function predict() {
       const prediction = await model.predict(webcam.canvas);
       prediction.sort((a, b) => b.probability - a.probability);
-      currentLabel = prediction[0].className;
+      const className = prediction[0].className;
+      // 한글 라벨 매핑
+      if (className === "A") currentLabel = "신선";
+      else if (className === "B") currentLabel = "주의";
+      else if (className === "C") currentLabel = "위험";
+      else currentLabel = className;
       document.getElementById("label").innerText = currentLabel;
     }
 
+    // 결과 확인
     function checkResult() {
-      const gas = parseInt(document.getElementById("gas").value);
+      const gasInput = document.getElementById("gas").value;
+      const gas = parseInt(gasInput);
       let message = "";
-
-      if (!gas && gas !== 0) {
-        // 센서 수치가 없을 경우, 이미지 분석 결과만 사용
-        if (currentLabel === "A") message = "맛있게 드세요.";
-        else if (currentLabel === "B") message = "괜찮아 보여도 먹지 마세요.";
-        else if (currentLabel === "C") message = "절대 먹지 마세요.";
+      // 라벨 및 센서값 조합 판단
+      if (gasInput === "" || isNaN(gas)) {
+        // 센서 수치 없을 때
+        if (currentLabel === "신선") message = "맛있게 드세요.";
+        else if (currentLabel === "주의") message = "괜찮아 보여도 먹지 마세요.";
+        else if (currentLabel === "위험") message = "절대 먹지 마세요.";
+        else message = "결과를 확인할 수 없습니다.";
       } else {
-        if (currentLabel === "A" && gas < 280) message = "맛있게 드세요.";
-        else if (currentLabel === "B" && gas >= 280 && gas <= 300) message = "괜찮아 보여도 먹지 마세요.";
-        else if (currentLabel === "C" && gas > 300) message = "절대 먹지 마세요.";
+        // 센서 수치 있을 때
+        if (currentLabel === "신선" && gas < 280) message = "맛있게 드세요.";
+        else if (currentLabel === "주의" && gas >= 280 && gas <= 300) message = "괜찮아 보여도 먹지 마세요.";
+        else if (currentLabel === "위험" && gas > 300) message = "절대 먹지 마세요.";
         else message = "⚠️ AI 분석 결과와 센서 수치가 일치하지 않습니다. 주의하세요.";
       }
-
       document.getElementById("finalMessage").innerText = message;
     }
   </script>
