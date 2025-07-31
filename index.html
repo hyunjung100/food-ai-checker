@@ -59,7 +59,7 @@
 
       // 카메라 권한 요청 및 스트림 설정
       try {
-        webcam = new tmImage.Webcam(300, 300, true);
+        webcam = new tmImage.Webcam(300, 300, false);
         await webcam.setup(); // 권한 요청
         await webcam.play();
         document.getElementById('finalMessage').innerText = '';
