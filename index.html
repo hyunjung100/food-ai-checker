@@ -7,10 +7,10 @@
   <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest"></script>
   <style>
     body { font-family: 'Malgun Gothic', sans-serif; text-align: center; padding: 20px; }
-    video { width: 300px; height: auto; border: 1px solid #ccc; margin-top: 10px; }
+    video, canvas { width: 300px; height: auto; border: 1px solid #ccc; margin-top: 10px; }
     .result { font-size: 20px; margin-top: 10px; }
     input { padding: 5px; font-size: 16px; width: 100px; }
-    #finalMessage { font-weight: bold; margin-top: 15px; }
+    #finalMessage { font-weight: bold; margin-top: 15px; color: darkred; }
     p.notice { font-size: 14px; color: gray; margin: 5px 0; }
   </style>
 </head>
@@ -19,7 +19,7 @@
   <p>▶ 카메라 실행을 눌러 음식을 인식하세요</p>
   <button type="button" onclick="init()">▶ 카메라 실행</button>
   <p class="notice">※ 카메라 실행 시, 브라우저에서 권한 허용을 요청할 수 있습니다.</p>
-  <video id="webcam" autoplay playsinline></video>
+  <div id="webcam-container"></div>
 
   <div class="result">
     <p>🧠 <strong>분석 결과:</strong> <span id="label"></span></p>
@@ -33,40 +33,54 @@
     let model, webcam, maxPredictions;
     let currentLabel = "";
 
-    // Teachable Machine 모델 URL
     const URL = "https://teachablemachine.withgoogle.com/models/DCFQawZzH/";
 
-    // 초기화 및 모델 로딩
     async function init() {
-      const modelURL = URL + "model.json";
-      const metadataURL = URL + "metadata.json";
+      // 브라우저 지원 여부 확인
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        document.getElementById('finalMessage').innerText = '현재 브라우저는 카메라 기능을 지원하지 않습니다. Chrome 또는 Firefox를 사용해주세요.';
+        return;
+      }
+
+      // 모델 로딩 안내
       document.getElementById('finalMessage').innerText = '모델을 불러오는 중...';
-      model = await tmImage.load(modelURL, metadataURL);
-      maxPredictions = model.getTotalClasses();
+      try {
+        const modelURL = URL + "model.json";
+        const metadataURL = URL + "metadata.json";
+        model = await tmImage.load(modelURL, metadataURL);
+        maxPredictions = model.getTotalClasses();
+      } catch (e) {
+        document.getElementById('finalMessage').innerText = '모델 로딩에 실패했습니다.';
+        console.error(e);
+        return;
+      }
 
-      const flip = true;
-      webcam = new tmImage.Webcam(300, 300, flip);
-      await webcam.setup();
-      await webcam.play();
-      window.requestAnimationFrame(loop);
-      document.getElementById('finalMessage').innerText = '';
-
-      document.getElementById("webcam").appendChild(webcam.canvas);
+      // 카메라 권한 요청 및 스트림 설정
+      try {
+        webcam = new tmImage.Webcam(300, 300, true);
+        await webcam.setup(); // 권한 요청
+        await webcam.play();
+        document.getElementById('finalMessage').innerText = '';
+        const container = document.getElementById('webcam-container');
+        container.innerHTML = '';
+        container.appendChild(webcam.canvas);
+        window.requestAnimationFrame(loop);
+      } catch (e) {
+        document.getElementById('finalMessage').innerText = '카메라 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.';
+        console.error(e);
+      }
     }
 
-    // 연속 예측 루프
     async function loop() {
       webcam.update();
       await predict();
       window.requestAnimationFrame(loop);
     }
 
-    // 예측 및 라벨 변환
     async function predict() {
       const prediction = await model.predict(webcam.canvas);
       prediction.sort((a, b) => b.probability - a.probability);
       const className = prediction[0].className;
-      // 한글 라벨 매핑
       if (className === "A") currentLabel = "신선";
       else if (className === "B") currentLabel = "주의";
       else if (className === "C") currentLabel = "위험";
@@ -74,20 +88,16 @@
       document.getElementById("label").innerText = currentLabel;
     }
 
-    // 결과 확인
     function checkResult() {
       const gasInput = document.getElementById("gas").value;
       const gas = parseInt(gasInput);
       let message = "";
-      // 라벨 및 센서값 조합 판단
       if (gasInput === "" || isNaN(gas)) {
-        // 센서 수치 없을 때
         if (currentLabel === "신선") message = "맛있게 드세요.";
         else if (currentLabel === "주의") message = "괜찮아 보여도 먹지 마세요.";
         else if (currentLabel === "위험") message = "절대 먹지 마세요.";
         else message = "결과를 확인할 수 없습니다.";
       } else {
-        // 센서 수치 있을 때
         if (currentLabel === "신선" && gas < 280) message = "맛있게 드세요.";
         else if (currentLabel === "주의" && gas >= 280 && gas <= 300) message = "괜찮아 보여도 먹지 마세요.";
         else if (currentLabel === "위험" && gas > 300) message = "절대 먹지 마세요.";
